@@ -284,6 +284,68 @@ const fmt=(v,n=2)=>v==null?'-':Number(v).toFixed(n);
 function getPicks(){try{return JSON.parse(localStorage.getItem('st_picks')||'[]')}catch(e){return[]}}
 function setPicks(a){localStorage.setItem('st_picks', JSON.stringify(a))}
 
+/* ---------- 持仓成本：存本机，改完立即生效，不用下载 ---------- */
+function getHold(){try{return JSON.parse(localStorage.getItem('st_hold')||'{}')}catch(e){return{}}}
+function setHold(o){localStorage.setItem('st_hold', JSON.stringify(o))}
+function effHold(d){
+  const h = getHold()[d.code];
+  if(h && h.shares>0) return h;
+  if(d.cost && d.shares) return {cost:d.cost, shares:d.shares};
+  return null;
+}
+function prevOf(d){ return d.chg ? d.price/(1+d.chg/100) : d.price; }
+
+function toast(msg){
+  let t = document.getElementById('__toast');
+  if(!t){
+    t = document.createElement('div'); t.id='__toast';
+    t.style.cssText='position:fixed;left:50%;bottom:34px;transform:translateX(-50%);background:#1e232c;border:1px solid #384150;color:#e8eaed;padding:10px 18px;border-radius:10px;font-size:13px;z-index:10000;box-shadow:0 8px 26px rgba(0,0,0,.55);opacity:0;transition:opacity .2s;pointer-events:none';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg; t.style.opacity = 1;
+  clearTimeout(t._h); t._h = setTimeout(()=>{ t.style.opacity = 0; }, 2400);
+}
+
+function editHold(code){
+  const d = DATA.find(x=>x.code===code); if(!d) return;
+  const h = effHold(d) || {};
+  const s = prompt(d.name+' '+code+'\n\n输入成本价（元）。留空并确定 = 清空该股成本', h.cost!=null?h.cost:'');
+  if(s===null) return;
+  if(String(s).trim()===''){ const o=getHold(); delete o[code]; setHold(o); applyHold(); toast('已清空 '+d.name+' 的成本'); return; }
+  const cost = parseFloat(s);
+  if(!(cost>0)){ alert('成本价要大于 0'); return; }
+  const sh = prompt('持有多少股？', h.shares||1000);
+  if(sh===null) return;
+  const shares = parseInt(sh,10);
+  if(!(shares>0)){ alert('股数要大于 0'); return; }
+  const o = getHold(); o[code] = {cost:cost, shares:shares}; setHold(o);
+  applyHold();
+  toast(d.name+' 已更新：成本 '+cost.toFixed(2)+' × '+shares+' 股');
+}
+
+function applyHold(){
+  document.querySelectorAll('tr[data-fitem]').forEach(tr=>{
+    const d = DATA.find(x=>x.code===tr.dataset.code); if(!d) return;
+    const h = effHold(d);
+    const cl = tr.querySelector('.costline');
+    if(cl) cl.textContent = h ? (' · 成本'+h.cost.toFixed(2)+'×'+h.shares+'股') : ' · 点此处填成本';
+    const td = tr.querySelector('.pnlcell');
+    if(td){
+      if(!h){ td.innerHTML = '<span style="color:#3d4450">—</span>'; tr.dataset.pnl = -999999; }
+      else{
+        const pnl = (d.price-h.cost)*h.shares;
+        const pct = (d.price/h.cost-1)*100;
+        const c = pnl>0?'#ff5c5c':(pnl<0?'#4ade80':'#7c8798');
+        td.innerHTML = '<b style="color:'+c+';font-family:ui-monospace,monospace">'+(pnl>0?'+':'')+pnl.toFixed(0)+'</b>'
+          +'<div style="font-size:10.5px;color:'+c+'">'+(pct>0?'+':'')+pct.toFixed(2)+'%</div>';
+        tr.dataset.pnl = pnl;
+      }
+    }
+  });
+  refreshStats(new Set(getPicks()));
+  refreshSum();
+}
+
 function togglePick(el){
   const code = el.dataset.code;
   let p = getPicks();
@@ -300,6 +362,7 @@ function applyPicks(){
     el.classList.toggle('is-pos', p.has(el.dataset.code));
   });
   layout();
+  applyHold();
 }
 
 /* ---------- 分组重排（持仓区 / 关注区） ---------- */
@@ -337,7 +400,15 @@ function refreshStats(p){
   DATA.forEach(d=>{
     if(!p.has(d.code)) return;
     n++;
-    if(d.mv!=null){ mv+=d.mv; cost+=d.cost*d.shares; pnl+=(d.pnl||0); day+=(d.day_pnl||0); hasCost++; }
+    const h = effHold(d);
+    if(h){
+      const prev = prevOf(d);
+      mv += d.price*h.shares;
+      cost += h.cost*h.shares;
+      pnl += (d.price-h.cost)*h.shares;
+      day += (d.price-prev)*h.shares;
+      hasCost++;
+    }
   });
   const el = $('stMv'); if(!el) return;
   el.textContent = hasCost ? (mv/10000).toFixed(2)+'万' : '—';
@@ -650,7 +721,7 @@ function download(name, text){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
 }
-function saveList(){
+function buildWatchlist(){
   const p = new Set(getPicks());
   const pos = DATA.filter(d=>p.has(d.code));
   const watch = DATA.filter(d=>!p.has(d.code));
@@ -660,14 +731,26 @@ function saveList(){
     themes.forEach(t=>{
       const arr = list.filter(d=>(d.theme||'未分类')===t);
       s += '['+type+'|'+t+'|'+(arr[0].priority||'中')+']\n';
-      arr.forEach(d=>{ s += d.code+'\n'; });
+      arr.forEach(d=>{
+        const h = type==='持仓' ? effHold(d) : null;
+        s += h ? (d.code+' '+h.cost.toFixed(2)+' '+h.shares) : d.code;
+        s += '\n';
+      });
       s += '\n';
     });
   };
   if(pos.length) group(pos,'持仓');
   if(watch.length) group(watch,'关注');
-  download('watchlist.txt', s);
-  alert('已生成 watchlist.txt\n\n请覆盖到 stock_tool 目录下，推送脚本才会知道你的持仓。\n（持仓 '+pos.length+' 只，关注 '+watch.length+' 只）');
+  return s;
+}
+function saveList(){
+  const p = getPicks();
+  applyHold();
+  toast('已保存到本机：持仓 '+p.length+' 只 / 关注 '+(DATA.length-p.length)+' 只，刷新不会丢');
+}
+function exportList(){
+  download('watchlist.txt', buildWatchlist());
+  toast('已导出 watchlist.txt（换电脑时用它）');
 }
 
 /* ---------- K线绘制 ---------- */
@@ -888,10 +971,10 @@ def render_app_html(stocks, data_time="", days=120) -> str:
   data-pnl="{pnl if pnl is not None else -999999}"
   onclick="openDetail({i})">
   <td onclick="event.stopPropagation()"><input type="checkbox" class="chk" data-code="{s['code']}" onchange="togglePick(this)"></td>
-  <td><div class="tname">{s['name']}</div><div class="tcode">{s['code']} · {s.get('theme','')}{costline}</div></td>
+  <td><div class="tname">{s['name']}</div><div class="tcode">{s['code']} · {s.get('theme','')}<span class="costline" title="点击填写成本价和股数" onclick="event.stopPropagation();editHold('{s['code']}')">{costline}</span></div></td>
   <td style="font-family:ui-monospace,monospace">{s['price']:.2f}</td>
   <td class="{cc}" style="font-family:ui-monospace,monospace">{s['chg']:+.2f}%</td>
-  <td>{pnl_html}</td>
+  <td class="pnlcell">{pnl_html}</td>
   <td><span class="scorec" style="color:{pc}">{s['score']:.1f}</span></td>
   <td><span class="badge bg-{'abcd'[['重点跟踪','可关注','观察','回避'].index(s['grade'])]}">{s['grade']}</span></td>
   <td><div class="dims" data-tip="四维|从左到右：趋势、动能、量能、基本面。每项满分100，50是中性。">{dims}</div></td>
@@ -958,6 +1041,7 @@ def render_app_html(stocks, data_time="", days=120) -> str:
   <div class="title">自选股 · 盯盘<em>{data_time}　共 {len(stocks)} 只</em></div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <button class="savebtn" onclick="saveList()">保存持仓</button>
+    <button class="savebtn" style="background:#21262d;border-color:#30363d;color:#8b949e" onclick="exportList()" title="换电脑时才需要用">导出</button>
     <div class="tabs">
       <button class="on" onclick="switchTab(0)">今天怎么办</button>
       <button onclick="switchTab(1)">盯盘面板</button>
@@ -996,8 +1080,9 @@ def render_app_html(stocks, data_time="", days=120) -> str:
 
   <div style="margin-top:16px;padding:12px 14px;background:#171a21;border:1px dashed #2a303c;border-radius:11px;
   font-size:12.5px;color:#7c8798;line-height:1.8">
-    勾选 = 持仓股，会移到上面的「我的持仓」，并且只在这里显示。<br>
-    勾完记得点右上角 <b style="color:#58a6ff">保存持仓</b>，推送脚本才会知道。
+    勾选 = 持仓股，立即移到上面「我的持仓」，<b style="color:#58a6ff">不用点保存、不用下载</b>。<br>
+    切到「盯盘面板」表格，点股票名下面的 <b style="color:#58a6ff">成本</b> 两个字，填买入价和股数，盈亏立刻算出来。<br>
+    这些设置存在你这台浏览器里，刷新、关电脑再开都还在。换电脑时才点右上角「导出」。
   </div>
 </div>
 
