@@ -346,6 +346,60 @@ function applyHold(){
   refreshSum();
 }
 
+/* ---------- 实时行情：由浏览器直接抓（服务器在境外只能拿到收盘价） ---------- */
+function symOf(c){ return (c[0]==='6'?'sh':'sz')+c; }
+function applyLive(){
+  let n = 0;
+  DATA.forEach(d=>{
+    const raw = window['v_'+symOf(d.code)];
+    if(!raw) return;
+    const f = String(raw).split('~');
+    const p = parseFloat(f[3]);
+    const chg = parseFloat(f[32]);
+    if(!(p>0) || isNaN(chg)) return;
+    d.price = p; d.chg = chg; d.prev = parseFloat(f[4]);
+    n++;
+  });
+  return n;
+}
+function updatePrices(){
+  document.querySelectorAll('[data-fitem]').forEach(el=>{
+    const d = DATA.find(x=>x.code===el.dataset.code);
+    if(!d) return;
+    const cls = d.chg>0?'up':(d.chg<0?'dn':'fl');
+    el.querySelectorAll('.px').forEach(e=>{
+      e.textContent = d.price.toFixed(2);
+      e.classList.remove('up','dn','fl'); e.classList.add(cls);
+    });
+    el.querySelectorAll('.cg').forEach(e=>{
+      e.textContent = (d.chg>0?'+':'')+d.chg.toFixed(2)+'%';
+      e.classList.remove('up','dn','fl'); e.classList.add(cls);
+    });
+  });
+  applyHold();
+}
+function loadLive(){
+  const sc = document.createElement('script');
+  sc.charset = 'gbk';
+  sc.src = 'https://qt.gtimg.cn/q=' + DATA.map(d=>symOf(d.code)).join(',') + '&_=' + Date.now();
+  sc.onload = function(){
+    try{
+      const n = applyLive();
+      if(n>0){
+        updatePrices();
+        const t = document.querySelector('.title em');
+        if(t) t.textContent = t.textContent.replace(/^\S+\s*\S*/, '实时行情');
+        toast('已同步实时价 '+n+' 只');
+      } else {
+        toast('行情源返回空，显示的是上次快照');
+      }
+    }catch(e){ console.warn('live failed', e); }
+    sc.remove();
+  };
+  sc.onerror = function(){ sc.remove(); toast('网络抓不到行情，显示上次快照'); };
+  document.head.appendChild(sc);
+}
+
 function togglePick(el){
   const code = el.dataset.code;
   let p = getPicks();
@@ -880,6 +934,7 @@ if(document.readyState==='loading'){
     try { applyPicks(); } catch(e) { console.warn('init failed', e); }
   });
 }
+setTimeout(()=>{ try{ loadLive(); }catch(e){ console.warn('live init failed', e); } }, 600);
 """
 
 
@@ -933,8 +988,8 @@ def render_app_html(stocks, data_time="", days=120) -> str:
       <span class="grp {pcls}">{s.get('theme','未分类')}·{s.get('priority','中')}</span></div>
     <div class="st {sc}">{s['status_text']}</div>
   </div>
-  <div class="l2"><div><b class="{cc}">{s['price']:.2f}</b>
-    <span class="{cc}">{s['chg']:+.2f}%</span></div>
+  <div class="l2"><div><b class="{cc} px">{s['price']:.2f}</b>
+    <span class="{cc} cg">{s['chg']:+.2f}%</span></div>
     <div data-tip="离过去一年最高价还差多少。">距年内高点 {s['from_high']}% ›</div></div>
 </div>""")
         (cards_pos if s.get("type") == "持仓" else cards_watch).append(cards[-1])
@@ -972,8 +1027,8 @@ def render_app_html(stocks, data_time="", days=120) -> str:
   onclick="openDetail({i})">
   <td onclick="event.stopPropagation()"><input type="checkbox" class="chk" data-code="{s['code']}" onchange="togglePick(this)"></td>
   <td><div class="tname">{s['name']}</div><div class="tcode">{s['code']} · {s.get('theme','')}<span class="costline" title="点击填写成本价和股数" onclick="event.stopPropagation();editHold('{s['code']}')">{costline}</span></div></td>
-  <td style="font-family:ui-monospace,monospace">{s['price']:.2f}</td>
-  <td class="{cc}" style="font-family:ui-monospace,monospace">{s['chg']:+.2f}%</td>
+  <td class="px" style="font-family:ui-monospace,monospace">{s['price']:.2f}</td>
+  <td class="{cc} cg" style="font-family:ui-monospace,monospace">{s['chg']:+.2f}%</td>
   <td class="pnlcell">{pnl_html}</td>
   <td><span class="scorec" style="color:{pc}">{s['score']:.1f}</span></td>
   <td><span class="badge bg-{'abcd'[['重点跟踪','可关注','观察','回避'].index(s['grade'])]}">{s['grade']}</span></td>
