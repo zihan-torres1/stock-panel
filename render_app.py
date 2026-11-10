@@ -391,7 +391,7 @@ function loadLive(){
         if(t){
           const d = new Date();
           const p2 = x => String(x).padStart(2,'0');
-          t.textContent = '刷新 '+p2(d.getHours())+':'+p2(d.getMinutes())+':'+p2(d.getSeconds())+' · 实时 · 共 '+DATA.length+' 只';
+          t.textContent = '刷新 '+p2(d.getHours())+':'+p2(d.getMinutes())+':'+p2(d.getSeconds())+' · 共 '+DATA.length+' 只';
         }
         toast('已同步实时价 '+n+' 只');
       } else {
