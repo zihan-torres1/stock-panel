@@ -387,8 +387,12 @@ function loadLive(){
       const n = applyLive();
       if(n>0){
         updatePrices();
-        const t = document.querySelector('.title em');
-        if(t) t.textContent = t.textContent.replace(/^\S+\s*\S*/, '实时行情');
+        const t = document.getElementById('dtime');
+        if(t){
+          const d = new Date();
+          const p2 = x => String(x).padStart(2,'0');
+          t.textContent = '刷新 '+p2(d.getHours())+':'+p2(d.getMinutes())+':'+p2(d.getSeconds())+' · 实时 · 共 '+DATA.length+' 只';
+        }
         toast('已同步实时价 '+n+' 只');
       } else {
         toast('行情源返回空，显示的是上次快照');
@@ -965,6 +969,8 @@ def _with_tips(stocks):
 
 
 def render_app_html(stocks, data_time="", days=120) -> str:
+    import time as _t
+    build_ts = _t.strftime("%m-%d %H:%M", _t.gmtime(_t.time() + 8 * 3600))
     n_d = sum(1 for s in stocks if s["status"] == "danger")
     n_g = sum(1 for s in stocks if s["status"] == "go")
     n_w = sum(1 for s in stocks if s["status"] == "wait")
@@ -1093,7 +1099,7 @@ def render_app_html(stocks, data_time="", days=120) -> str:
 <title>今天怎么办</title><style>{CSS}</style></head><body>
 
 <div class="top">
-  <div class="title">自选股 · 盯盘<em>{data_time}　共 {len(stocks)} 只</em></div>
+  <div class="title">自选股 · 盯盘<em id="dtime" style="cursor:pointer" title="点这里可手动刷新" onclick="loadLive()">生成 {build_ts}　共 {len(stocks)} 只</em></div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <button class="savebtn" onclick="saveList()">保存持仓</button>
     <button class="savebtn" style="background:#21262d;border-color:#30363d;color:#8b949e" onclick="exportList()" title="换电脑时才需要用">导出</button>
