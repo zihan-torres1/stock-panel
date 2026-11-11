@@ -295,6 +295,30 @@ function effHold(d){
 }
 function prevOf(d){ return d.chg ? d.price/(1+d.chg/100) : d.price; }
 
+/* 持仓分：只看"拿着舒不舒服"，与入场分完全分开
+   趋势40（站上各条均线）+ 盈亏30 + 位置30（距高点越近越高） */
+function holdScore(d, h){
+  if(!h) return null;
+  const ma = d.ma || [0,0,0,0];
+  let s = 0;
+  for(let i=0;i<4;i++){ if(d.price > ma[i]) s += 10; }
+  const pct = (d.price/h.cost - 1) * 100;
+  if(pct >= 30) s += 30;
+  else if(pct >= 10) s += 25;
+  else if(pct >= 0) s += 20;
+  else if(pct >= -10) s += 12;
+  else if(pct >= -25) s += 5;
+  const fh = d.from_high != null ? d.from_high : -100;
+  if(fh >= -10) s += 30;
+  else if(fh >= -25) s += 24;
+  else if(fh >= -40) s += 16;
+  else if(fh >= -60) s += 8;
+  return Math.round(Math.max(0, Math.min(100, s)));
+}
+function holdColor(hs){
+  return hs >= 70 ? '#ff5c5c' : (hs >= 50 ? '#fbbf24' : '#7c8798');
+}
+
 function toast(msg){
   let t = document.getElementById('__toast');
   if(!t){
@@ -328,7 +352,15 @@ function applyHold(){
     const d = DATA.find(x=>x.code===tr.dataset.code); if(!d) return;
     const h = effHold(d);
     const cl = tr.querySelector('.costline');
-    if(cl) cl.textContent = h ? (' · 成本'+h.cost.toFixed(2)+'×'+h.shares+'股') : ' · 点此处填成本';
+    if(cl){
+      if(h){
+        const hs = holdScore(d, h);
+        cl.innerHTML = ' · 成本'+h.cost.toFixed(2)+'×'+h.shares+'股'
+          + (hs!=null ? ' <b style="color:'+holdColor(hs)+'">持仓'+hs+'分</b>' : '');
+      } else {
+        cl.textContent = ' · 点此处填成本';
+      }
+    }
     const td = tr.querySelector('.pnlcell');
     if(td){
       if(!h){ td.innerHTML = '<span style="color:#3d4450">—</span>'; tr.dataset.pnl = -999999; }
