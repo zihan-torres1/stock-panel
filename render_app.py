@@ -295,25 +295,27 @@ function effHold(d){
 }
 function prevOf(d){ return d.chg ? d.price/(1+d.chg/100) : d.price; }
 
-/* 持仓分：只看"拿着舒不舒服"，与入场分完全分开
-   趋势40（站上各条均线）+ 盈亏30 + 位置30（距高点越近越高） */
+/* 持仓分：只回答"这只票现在还该不该拿"，不看你的成本（沉没成本不该影响决策）
+   趋势 50（每条均线 12.5）+ 位置 25（距高点）+ 动量 25（站上MA5 15 + 当日红盘 10） */
 function holdScore(d, h){
   if(!h) return null;
   const ma = d.ma || [0,0,0,0];
   let s = 0;
-  for(let i=0;i<4;i++){ if(d.price > ma[i]) s += 10; }
-  const pct = (d.price/h.cost - 1) * 100;
-  if(pct >= 30) s += 30;
-  else if(pct >= 10) s += 25;
-  else if(pct >= 0) s += 20;
-  else if(pct >= -10) s += 12;
-  else if(pct >= -25) s += 5;
+  for(let i=0;i<4;i++){ if(d.price > ma[i]) s += 12.5; }
   const fh = d.from_high != null ? d.from_high : -100;
-  if(fh >= -10) s += 30;
-  else if(fh >= -25) s += 24;
-  else if(fh >= -40) s += 16;
+  if(fh >= -10) s += 25;
+  else if(fh >= -25) s += 20;
+  else if(fh >= -40) s += 15;
   else if(fh >= -60) s += 8;
+  if(d.price > (ma[0]||0)) s += 15;
+  if(d.chg > 0) s += 10;
   return Math.round(Math.max(0, Math.min(100, s)));
+}
+function holdVerdict(hs){
+  if(hs >= 70) return {txt:'可持有', cls:'g'};
+  if(hs >= 50) return {txt:'观察',   cls:'w'};
+  if(hs >= 35) return {txt:'减仓',   cls:'d'};
+  return {txt:'该走', cls:'d'};
 }
 function holdColor(hs){
   return hs >= 70 ? '#ff5c5c' : (hs >= 50 ? '#fbbf24' : '#7c8798');
@@ -372,6 +374,20 @@ function applyHold(){
           +'<div style="font-size:10.5px;color:'+c+'">'+(pct>0?'+':'')+pct.toFixed(2)+'%</div>';
         tr.dataset.pnl = pnl;
       }
+    }
+  });
+  document.querySelectorAll('.card').forEach(el=>{
+    const d = DATA.find(x=>x.code===el.dataset.code);
+    const box = el.querySelector('.stbox');
+    if(!d || !box) return;
+    const h = effHold(d);
+    if(h){
+      const v = holdVerdict(holdScore(d, h));
+      box.textContent = v.txt;
+      box.className = 'st stbox ' + v.cls;
+      box.title = '持仓视角：' + v.txt + '（与"能不能买"无关）';
+    } else {
+      box.textContent = box.dataset.def || box.textContent;
     }
   });
   refreshStats(new Set(getPicks()));
@@ -1024,7 +1040,7 @@ def render_app_html(stocks, data_time="", days=120) -> str:
     <div class="nm">{s['name']}<span class="c">{s['code']}</span>
       <span class="grp {tcls}">{s.get('type','关注')}</span>
       <span class="grp {pcls}">{s.get('theme','未分类')}·{s.get('priority','中')}</span></div>
-    <div class="st {sc}">{s['status_text']}</div>
+    <div class="st {sc} stbox" data-def="{s['status_text']}">{s['status_text']}</div>
   </div>
   <div class="l2"><div><b class="{cc} px">{s['price']:.2f}</b>
     <span class="{cc} cg">{s['chg']:+.2f}%</span></div>
