@@ -349,8 +349,13 @@ def build_payload(codes, days: int = 120, meta=None, with_company=True) -> list:
             "day_pnl": (round((r["price"] - (r["price"] / (1 + r["chg"] / 100))) * shs, 2)
                         if (shs and r["chg"] != -100) else None),
             "price": r["price"], "chg": r["chg"],
-            "status": "danger" if r["sell_cnt"] > 0 else ("go" if r["buy_cnt"] >= 2 else "wait"),
-            "status_text": "先减仓" if r["sell_cnt"] > 0 else ("可小试" if r["buy_cnt"] >= 2 else "再等等"),
+            "status": ("danger" if r.get("sell_hard", r["sell_cnt"]) > 0 else
+                       ("wait" if r.get("sell_soft", 0) > 0 else
+                        ("go" if r["buy_cnt"] >= 2 else "wait"))),
+            "status_text": ("先减仓" if r.get("sell_hard", r["sell_cnt"]) > 0 else
+                            ("别追高" if r.get("sell_soft", 0) > 0 else
+                             ("可小试" if r["buy_cnt"] >= 2 else "再等等"))),
+            "sell_hard": r.get("sell_hard", r["sell_cnt"]), "sell_soft": r.get("sell_soft", 0),
             "score": r["score"], "tags": r["tags"], "advice": r["advice"],
             "grade": r["grade"], "gcls": r["gcls"],
             "T": r["T"], "M": r["M"], "V": r["V"], "F": r["F"],
@@ -616,14 +621,17 @@ def analyze(symbol: str, code: str, name: str, snap: dict, df: pd.DataFrame,
     ]
     buy_names = [k for k, v in buy_hits if v]
     buy_cnt = len(buy_names)
+    # 卖点分级：hard=真的该减仓；soft=只是别追高，不等于要卖
     sell_hits = [
-        ("顶背离", bool(div.get("top"))),
-        ("量增价滞", vol_stall),
-        ("无量拉升", vol_no_price),
-        ("跌破10日线", break_ma10),
-        ("KDJ高位死叉", kdj_dead and K > 75),
+        ("顶背离", bool(div.get("top")), "hard"),
+        ("量增价滞", vol_stall, "hard"),
+        ("无量拉升", vol_no_price, "soft"),
+        ("跌破10日线", break_ma10, "hard"),
+        ("KDJ高位死叉", kdj_dead and K > 75, "hard"),
     ]
-    sell_cnt = sum(1 for _, v in sell_hits if v)
+    sell_cnt = sum(1 for _, v, _ in sell_hits if v)
+    sell_hard = sum(1 for _, v, lv in sell_hits if v and lv == "hard")
+    sell_soft = sum(1 for _, v, lv in sell_hits if v and lv == "soft")
     buy_ready = buy_cnt >= 2 and sell_cnt == 0
 
     if score >= 76:
@@ -682,7 +690,8 @@ def analyze(symbol: str, code: str, name: str, snap: dict, df: pd.DataFrame,
         "ma": (round(ma5, 2), round(ma10, 2), round(ma20, 2), round(ma60, 2)),
         "tags": tags, "advice": adv, "min": min_info, "dragon": dragon,
         "buy_cnt": buy_cnt, "sell_cnt": sell_cnt, "buy_ready": buy_ready,
-        "buy_hits": [k for k, v in buy_hits if v], "sell_hits": [k for k, v in sell_hits if v],
+        "buy_hits": [k for k, v in buy_hits if v], "sell_hits": [k for k, v, _ in sell_hits if v],
+        "sell_hard": sell_hard, "sell_soft": sell_soft,
         "last_day": str(df["day"].iloc[-1])[:10],
     }
 
