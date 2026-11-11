@@ -295,26 +295,26 @@ function effHold(d){
 }
 function prevOf(d){ return d.chg ? d.price/(1+d.chg/100) : d.price; }
 
-/* 持仓分：只回答"这只票现在还该不该拿"，不看你的成本（沉没成本不该影响决策）
-   趋势 50（每条均线 12.5）+ 位置 25（距高点）+ 动量 25（站上MA5 15 + 当日红盘 10） */
+/* 持仓分：只回答"现在还该不该拿"。不看成本、不看历史涨跌，只看当下的趋势/结构/动量。
+   趋势 50（站上MA5/10/20/60各12.5）+ 结构 30（均线两两排列各10）+ 动量 20（当日涨跌分档） */
 function holdScore(d, h){
   if(!h) return null;
   const ma = d.ma || [0,0,0,0];
   let s = 0;
   for(let i=0;i<4;i++){ if(d.price > ma[i]) s += 12.5; }
-  const fh = d.from_high != null ? d.from_high : -100;
-  if(fh >= -10) s += 25;
-  else if(fh >= -25) s += 20;
-  else if(fh >= -40) s += 15;
-  else if(fh >= -60) s += 8;
-  if(d.price > (ma[0]||0)) s += 15;
-  if(d.chg > 0) s += 10;
+  if(ma[0] > ma[1]) s += 10;
+  if(ma[1] > ma[2]) s += 10;
+  if(ma[2] > ma[3]) s += 10;
+  const c = d.chg || 0;
+  if(c > 3) s += 20;
+  else if(c >= 0) s += 14;
+  else if(c > -2) s += 8;
   return Math.round(Math.max(0, Math.min(100, s)));
 }
 function holdVerdict(hs){
-  if(hs >= 70) return {txt:'可持有', cls:'g'};
-  if(hs >= 50) return {txt:'观察',   cls:'w'};
-  if(hs >= 35) return {txt:'减仓',   cls:'d'};
+  if(hs >= 60) return {txt:'可持有', cls:'g'};
+  if(hs >= 40) return {txt:'观察',   cls:'w'};
+  if(hs >= 20) return {txt:'减仓',   cls:'d'};
   return {txt:'该走', cls:'d'};
 }
 function holdColor(hs){
