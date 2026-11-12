@@ -693,10 +693,14 @@ function openDetail(i){
   const cls = d.chg>0?'up':(d.chg<0?'dn':'fl');
   // 持仓股显示持仓视角结论，非持仓股显示入场建议——两套逻辑不混用
   const _h = effHold(d);
-  let stc, stTxt;
+  let stc, stTxt, _hs=null, _above=0, _arr=0;
   if(_h){
-    const _v = holdVerdict(holdScore(d, _h));
+    _hs = holdScore(d, _h);
+    const _v = holdVerdict(_hs);
     stc = _v.cls; stTxt = _v.txt;
+    const _ma = d.ma || [0,0,0,0];
+    _above = _ma.filter(v=>d.price>v).length;
+    _arr = (_ma[0]>_ma[1]?1:0)+(_ma[1]>_ma[2]?1:0)+(_ma[2]>_ma[3]?1:0);
   } else {
     stc = d.status==='danger'?'d':(d.status==='go'?'g':'w');
     stTxt = d.status_text;
@@ -705,18 +709,34 @@ function openDetail(i){
     '<div class="st '+stc+'">'+stTxt+'</div>';
   $('dp').innerHTML = fmt(d.price)+'<em class="'+cls+'">'+(d.chg>0?'+':'')+fmt(d.chg)+'%</em>';
 
-  // 综合判断（置顶）
-  const col = d.score>=76?'#ff5c5c':(d.score>=66?'#fbbf24':(d.score>=55?'#58a6ff':'#5f6b7d'));
+  // 综合判断（置顶）：持仓股用持仓分，非持仓股用入场分
+  const col = _hs!=null ? holdColor(_hs) :
+    (d.score>=76?'#ff5c5c':(d.score>=66?'#fbbf24':(d.score>=55?'#58a6ff':'#5f6b7d')));
   const dims = [[d.T,'#58a6ff','趋势'],[d.M,'#a371f7','动能'],[d.V,'#4ade80','量能'],[d.F,'#fbbf24','基本面']]
     .map(x=>'<i style="height:'+Math.max(3,x[0]/100*26)+'px;background:'+x[1]+'" title="'+x[2]+' '+x[0]+'"></i>').join('');
+  const _mainS = _hs!=null ? _hs : d.score;
+  const _vtxt = _hs!=null
+    ? ('持仓视角　站上 <b style="color:#58a6ff">'+_above+'</b>/4 均线　多头排列 <b style="color:#58a6ff">'+_arr+'</b>/3')
+    : ('买点 <b style="color:#4ade80">'+d.buy_cnt+'</b>/7　卖点 <b style="color:'+(d.sell_cnt?'#ff5c5c':'#5f6b7d')+'">'+d.sell_cnt+'</b>');
   $('vhead').innerHTML =
-    '<div class="vscore" style="color:'+col+'">'+d.score.toFixed(1)+'</div>'+
+    '<div class="vscore" style="color:'+col+'">'+_mainS.toFixed(1)+'</div>'+
     '<div><div class="vdims">'+dims+'</div>'+
-    '<div style="font-size:10px;color:#4d5766;margin-top:3px">趋势/动能/量能/基本面</div></div>'+
-    '<div class="vtxt">买点 <b style="color:#4ade80">'+d.buy_cnt+'</b>/7　卖点 <b style="color:'+(d.sell_cnt?'#ff5c5c':'#5f6b7d')+'">'+d.sell_cnt+'</b><br>'+
-    '距年内高点 '+d.from_high+'%　年内位置 '+d.pos+'%</div>';
+    '<div style="font-size:10px;color:#4d5766;margin-top:3px">'+(_hs!=null?'趋势/动能/量能/基本面':'趋势/动能/量能/基本面')+'</div></div>'+
+    '<div class="vtxt">'+_vtxt+'<br>距年内高点 '+d.from_high+'%　年内位置 '+d.pos+'%</div>';
 
-  $('adv').innerHTML = (d.advice||[]).map(a=>'<div>→ '+a+'</div>').join('');
+  // 建议区：持仓股给持仓视角，非持仓股给入场建议（不混用）
+  if(_hs!=null){
+    const _adv = [
+      '持仓视角（不看你的成本价）：站上 '+_above+'/4 条均线，多头排列 '+_arr+'/3',
+      '结论：'+stTxt+'（'+_hs+' 分）',
+      _above<=1 ? '多数均线之下，趋势已走坏——反弹是减仓机会，不要摊平成本'
+        : (_arr>=2 ? '结构完好，跌破 MA10（'+fmt(d.ma[1])+'）再考虑减'
+                   : '结构一般，以观察为主，跌破 MA10（'+fmt(d.ma[1])+'）减仓')
+    ];
+    $('adv').innerHTML = _adv.map(a=>'<div>→ '+a+'</div>').join('');
+  } else {
+    $('adv').innerHTML = (d.advice||[]).map(a=>'<div>→ '+a+'</div>').join('');
+  }
   $('sig').innerHTML = (d.tags||[]).map(t=>'<span class="tag t-'+(t[1]==='good'?'good':t[1]==='bad'?'bad':t[1]==='warn'?'warn':'info')+
     '" data-tip="'+(t[2]||'').replace(/"/g,'&quot;')+'">'+t[0]+'</span>').join('');
   $('levels').innerHTML = [
