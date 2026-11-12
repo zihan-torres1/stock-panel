@@ -44,7 +44,7 @@ TIPS = {
 
 HEAD_TIPS = {
     "评分": "综合分（0-100）。趋势32% + 动能30% + 量能23% + 基本面15%，再减去风险扣分。50分是中性。",
-    "档位": "≥76 重点跟踪 / ≥66 可关注 / ≥55 观察 / 低于55 回避。",
+    "档位": "≥76 重点跟踪 / ≥66 可关注 / ≥55 观察 / 低于55 回避。这是选股视角（能不能买）；持仓股该不该拿，看卡片上的持仓分。",
     "四维": "从左到右：趋势、动能、量能、基本面。每项满分100，50为中性，柱子越高越强。",
     "买点": "命中了几个买入信号（共7项）。书里说：单一指标不算时机，≥2项共振才算。点这里看详细清单。",
     "卖点": "命中了几个卖出信号（共5项）。≥1就该处理。点这里看详细清单。",
@@ -571,9 +571,12 @@ function buildCheck(p){
     else if(pct>25) items.push(['info','集中度', '最大单只 '+top.name+' '+pct.toFixed(0)+'%，尚可接受']);
     else items.push(['good','分散度','最大单只 '+top.name+' '+pct.toFixed(0)+'%，仓位比较分散']);
   }
-  // 卖出信号
-  const sell = arr.filter(d=>d.sell_cnt>0);
-  if(sell.length) items.push(['bad','风控', sell.length+' 只触发卖出信号：'+sell.map(d=>d.name).join('、')+'，按纪律先减']);
+  // 走势转弱（持仓视角，不用选股卖点，避免和"可持有"打架）
+  const sell = arr.filter(d=>{
+    const h = effHold(d);
+    return h ? holdScore(d, h) < 40 : false;
+  });
+  if(sell.length) items.push(['bad','走势转弱', sell.length+' 只持仓分跌破 40：'+sell.map(d=>d.name).join('、')+'，按纪律减一部分']);
   // 深亏
   const deep = arr.filter(d=>d.pnl_pct!=null && d.pnl_pct<-10);
   if(deep.length) items.push(['warn','亏损扩大', deep.length+' 只浮亏超 10%：'+deep.map(d=>d.name+' '+d.pnl_pct.toFixed(0)+'%').join('、')+'，检查是否已破位']);
@@ -726,12 +729,16 @@ function openDetail(i){
 
   // 建议区：持仓股给持仓视角，非持仓股给入场建议（不混用）
   if(_hs!=null){
+    // 操作提示严格跟随持仓结论，避免"结论说减仓、文案说观察"的打架
+    const _ma10 = fmt(d.ma[1]);
+    const _hint = stTxt==='可持有' ? '结构完好，跌破 MA10（'+_ma10+'）再考虑减'
+                : stTxt==='观察'   ? '结构一般，以观察为主，跌破 MA10（'+_ma10+'）减仓'
+                : stTxt==='减仓'   ? '趋势走弱，反弹到 MA10（'+_ma10+'）附近减一部分'
+                                   : '多数均线之下，趋势已走坏——反弹是减仓机会，不要摊平成本';
     const _adv = [
       '持仓视角（不看你的成本价）：站上 '+_above+'/4 条均线，多头排列 '+_arr+'/3',
       '结论：'+stTxt+'（'+_hs+' 分）',
-      _above<=1 ? '多数均线之下，趋势已走坏——反弹是减仓机会，不要摊平成本'
-        : (_arr>=2 ? '结构完好，跌破 MA10（'+fmt(d.ma[1])+'）再考虑减'
-                   : '结构一般，以观察为主，跌破 MA10（'+fmt(d.ma[1])+'）减仓')
+      _hint
     ];
     $('adv').innerHTML = _adv.map(a=>'<div>→ '+a+'</div>').join('');
   } else {
