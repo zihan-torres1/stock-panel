@@ -181,7 +181,7 @@ box-shadow:0 8px 26px rgba(0,0,0,.55);display:none;pointer-events:none}
 </style></head><body>
 
 <div class="top">
-  <div class="title">自选股 · 盯盘<em id="dtime" style="cursor:pointer" title="点这里可手动刷新" onclick="loadLive()">生成 11-13 01:05　共 20 只</em></div>
+  <div class="title">自选股 · 盯盘<em id="dtime" style="cursor:pointer" title="点这里可手动刷新" onclick="loadLive()">生成 11-13 01:12　共 20 只</em></div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <button class="savebtn" onclick="saveList()">保存持仓</button>
     <button class="savebtn" style="background:#21262d;border-color:#30363d;color:#8b949e" onclick="exportList()" title="换电脑时才需要用">导出</button>
@@ -224,7 +224,7 @@ box-shadow:0 8px 26px rgba(0,0,0,.55);display:none;pointer-events:none}
     <div class="nm">工业富联<span class="c">601138</span>
       <span class="grp grp-pos">持仓</span>
       <span class="grp pri-h">AI算力·高</span></div>
-    <div class="st d stbox" data-def="先减仓">先减仓</div>
+    <div class="st w stbox" data-def="—">—</div>
   </div>
   <div class="l2"><div><b class="dn px">43.35</b>
     <span class="dn cg">-4.85%</span></div>
@@ -237,7 +237,7 @@ box-shadow:0 8px 26px rgba(0,0,0,.55);display:none;pointer-events:none}
     <div class="nm">捷捷微电<span class="c">300623</span>
       <span class="grp grp-pos">持仓</span>
       <span class="grp pri-h">半导体·高</span></div>
-    <div class="st w stbox" data-def="再等等">再等等</div>
+    <div class="st w stbox" data-def="—">—</div>
   </div>
   <div class="l2"><div><b class="dn px">26.94</b>
     <span class="dn cg">-2.04%</span></div>
@@ -250,7 +250,7 @@ box-shadow:0 8px 26px rgba(0,0,0,.55);display:none;pointer-events:none}
     <div class="nm">科博达<span class="c">603786</span>
       <span class="grp grp-pos">持仓</span>
       <span class="grp pri-h">汽车电子·高</span></div>
-    <div class="st d stbox" data-def="先减仓">先减仓</div>
+    <div class="st w stbox" data-def="—">—</div>
   </div>
   <div class="l2"><div><b class="dn px">39.11</b>
     <span class="dn cg">-0.74%</span></div>
@@ -1445,9 +1445,18 @@ function openDetail(i){
   window.scrollTo(0,0);
 
   const cls = d.chg>0?'up':(d.chg<0?'dn':'fl');
-  const stc = d.status==='danger'?'d':(d.status==='go'?'g':'w');
+  // 持仓股显示持仓视角结论，非持仓股显示入场建议——两套逻辑不混用
+  const _h = effHold(d);
+  let stc, stTxt;
+  if(_h){
+    const _v = holdVerdict(holdScore(d, _h));
+    stc = _v.cls; stTxt = _v.txt;
+  } else {
+    stc = d.status==='danger'?'d':(d.status==='go'?'g':'w');
+    stTxt = d.status_text;
+  }
   $('dh').innerHTML = '<div class="t">'+d.name+'<span>'+d.code+' · '+d.board+' · '+(d.theme||'')+'</span></div>'+
-    '<div class="st '+stc+'">'+d.status_text+'</div>';
+    '<div class="st '+stc+'">'+stTxt+'</div>';
   $('dp').innerHTML = fmt(d.price)+'<em class="'+cls+'">'+(d.chg>0?'+':'')+fmt(d.chg)+'%</em>';
 
   // 综合判断（置顶）
