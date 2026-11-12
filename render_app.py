@@ -691,9 +691,18 @@ function openDetail(i){
   window.scrollTo(0,0);
 
   const cls = d.chg>0?'up':(d.chg<0?'dn':'fl');
-  const stc = d.status==='danger'?'d':(d.status==='go'?'g':'w');
+  // 持仓股显示持仓视角结论，非持仓股显示入场建议——两套逻辑不混用
+  const _h = effHold(d);
+  let stc, stTxt;
+  if(_h){
+    const _v = holdVerdict(holdScore(d, _h));
+    stc = _v.cls; stTxt = _v.txt;
+  } else {
+    stc = d.status==='danger'?'d':(d.status==='go'?'g':'w');
+    stTxt = d.status_text;
+  }
   $('dh').innerHTML = '<div class="t">'+d.name+'<span>'+d.code+' · '+d.board+' · '+(d.theme||'')+'</span></div>'+
-    '<div class="st '+stc+'">'+d.status_text+'</div>';
+    '<div class="st '+stc+'">'+stTxt+'</div>';
   $('dp').innerHTML = fmt(d.price)+'<em class="'+cls+'">'+(d.chg>0?'+':'')+fmt(d.chg)+'%</em>';
 
   // 综合判断（置顶）
@@ -1032,6 +1041,10 @@ def render_app_html(stocks, data_time="", days=120) -> str:
         cc = "up" if s["chg"] > 0 else ("dn" if s["chg"] < 0 else "fl")
         tcls = "grp-pos" if s.get("type") == "持仓" else "grp-watch"
         pcls = {"高": "pri-h", "中": "pri-m"}.get(s.get("priority", "中"), "pri-l")
+        # 持仓股的静态占位不写结论（结论由浏览器端按持仓分算出），避免加载瞬间闪出错误建议
+        _is_pos = s.get("type") == "持仓"
+        st_cls = "w" if _is_pos else sc
+        st_txt = "—" if _is_pos else s["status_text"]
         cards.append(f"""<div class="card {cls}" data-fitem="1" data-code="{s['code']}"
   data-type="{s.get('type','关注')}" data-theme="{s.get('theme','未分类')}"
   data-pri="{s.get('priority','中')}" data-score="{s['score']}" onclick="openDetail({i})">
@@ -1040,7 +1053,7 @@ def render_app_html(stocks, data_time="", days=120) -> str:
     <div class="nm">{s['name']}<span class="c">{s['code']}</span>
       <span class="grp {tcls}">{s.get('type','关注')}</span>
       <span class="grp {pcls}">{s.get('theme','未分类')}·{s.get('priority','中')}</span></div>
-    <div class="st {sc} stbox" data-def="{s['status_text']}">{s['status_text']}</div>
+    <div class="st {st_cls} stbox" data-def="{st_txt}">{st_txt}</div>
   </div>
   <div class="l2"><div><b class="{cc} px">{s['price']:.2f}</b>
     <span class="{cc} cg">{s['chg']:+.2f}%</span></div>
